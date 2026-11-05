@@ -25,6 +25,15 @@ Help reuse Codex sessions affected by `model_provider` metadata mismatches by ke
 
 ## Safe operating flow
 
+Large-history rehearsal tools live in `scripts/rehearse-history-*`. They
+must only write a named `.local-history-lab` directory under this repository,
+and snapshot readers must never write the real Codex Home. Do not copy
+`auth.json` or add the lab directory, its body hashes, or original message
+content to Git. Always capture the decoded body hashes and non-provider State
+DB fingerprint before a rehearsal Sync, verify after, and verify again after
+Restore. This tests local Provider migration only; it does not establish
+Codex Remote app support for compressed history.
+
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.
 3. Choose `sync`, `switch`, or `restore` from the rules below.

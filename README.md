@@ -42,6 +42,12 @@
 - 目前仅支持压缩会话的 **Provider 元数据同步**，不支持其 `turn_context.model` 的历史模型批量改写。该功能也不意味着 Codex Desktop / Remote 必然能够原生读取压缩会话。
 - **不要直接对真实历史目录执行迁移**：先对独立数据副本测试，确认备份、恢复、项目关联和客户端行为，再安排正式同步。
 
+### 完整历史副本演练
+
+`scripts/rehearse-history-snapshot.py` 可使用 SQLite Online Backup 和原始会话文件创建隔离副本（不会复制 `auth.json`），仅在副本数据库中重新定位 `rollout_path`；`scripts/rehearse-history-integrity.mjs` 计算所有文件 **解压后消息正文** 与非 Provider SQLite 字段的完整性基线；`scripts/rehearse-history-sync.mjs` 只接受名为 `.local-history-lab` 的副本目录，执行 Provider 同步或 UndoBackup 恢复。演练副本和完整性清单属于本地敏感数据，禁止加入 Git 提交或共享。
+
+请依次完成快照、`capture`、`sync`、`verify`、`restore`、`restore` 完整性校验；真正的 Codex Remote 可见性还需要另行验证。
+
 ## 核心功能
 
 - **同步与切换**：预览或直接同步，按需开启自动同步。
