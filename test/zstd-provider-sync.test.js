@@ -11,7 +11,7 @@ import { runRestore, runSync } from "../src/service.js";
 
 const zstdSupported = typeof zstdCompressSync === "function" && typeof zstdDecompressSync === "function";
 
-async function createFixture(t) {
+async function createFixture(t, { walMode = false } = {}) {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-zstd-sync-"));
   t.after(() => fs.rm(home, { recursive: true, force: true }));
   await fs.mkdir(path.join(home, "sessions"), { recursive: true });
@@ -29,6 +29,7 @@ async function createFixture(t) {
   const dbPath = path.join(home, "sqlite", "state_5.sqlite");
   const db = await openDatabase(dbPath);
   try {
+    if (walMode) db.exec("PRAGMA journal_mode=WAL");
     db.exec(`CREATE TABLE threads (
       id TEXT PRIMARY KEY, model_provider TEXT, rollout_path TEXT,
       archived INTEGER DEFAULT 0, updated_at INTEGER DEFAULT 100,
@@ -98,6 +99,40 @@ test("compressed session metadata is indexed, synchronized and restored without 
   const restored = await runRestore({ backupDir: result.backupDir, codexHome: fixture.home });
   assert.equal(restored.restoreJournalState, "completed", JSON.stringify(restored));
   for (const [id, file] of fixture.paths) assert.deepEqual(await rolloutBytes(file), fixture.original.get(id));
+});
+
+test("Restore of WAL-mode compressed history never writes SQLite sidecars inside its managed source backup", { skip: !zstdSupported }, async t => {
+  const fixture = await createFixture(t, { walMode: true });
+  const result = await runSync({ codexHome: fixture.home });
+  assert.equal(result.partial, false, JSON.stringify(result));
+  const sourceDb = path.join(result.backupDir, "db", "sqlite-home", "state_5.sqlite");
+  const sourceFiles = () => fs.readdir(path.dirname(sourceDb));
+  assert.deepEqual(await sourceFiles(), ["state_5.sqlite"]);
+  assert.equal((await fs.readFile(sourceDb))[18], 2, "WAL mode is retained in the standalone backup");
+
+  const restored = await runRestore({ codexHome: fixture.home, backupDir: result.backupDir });
+  assert.equal(restored.restoreJournalState, "completed", JSON.stringify(restored));
+  assert.deepEqual(await sourceFiles(), ["state_5.sqlite"], "Restore must not change its own source backup");
+  for (const [id, file] of fixture.paths) {
+    assert.deepEqual(await rolloutBytes(file), fixture.original.get(id));
+  }
+});
+
+test("immutable snapshot reads reject a managed source with a nonempty WAL", { skip: !zstdSupported }, async t => {
+  const fixture = await createFixture(t, { walMode: true });
+  const result = await runSync({ codexHome: fixture.home });
+  const sourceDb = path.join(result.backupDir, "db", "sqlite-home", "state_5.sqlite");
+  const wal = `${sourceDb}-wal`;
+  await fs.writeFile(wal, Buffer.from("uncommitted WAL payload"));
+  await assert.rejects(
+    openDatabase(sourceDb, { readOnly: true, immutableSnapshot: true }),
+    /nonempty or invalid WAL/
+  );
+  await assert.rejects(
+    runRestore({ codexHome: fixture.home, backupDir: result.backupDir }),
+    error => error?.code === "BACKUP_FAILED"
+      && /nonempty or invalid WAL/.test(String(error?.cause?.message))
+  );
 });
 
 test("compressed file changed after preparation is skipped, not overwritten", { skip: !zstdSupported }, async t => {

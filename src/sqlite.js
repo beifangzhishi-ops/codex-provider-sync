@@ -1,4 +1,6 @@
 import path from "node:path";
+import fs from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 let databaseFactoryPromise = null;
 
@@ -108,5 +110,31 @@ async function getDatabaseFactory() {
 
 export async function openDatabase(dbPath, options = {}) {
   const createDatabase = await getDatabaseFactory();
+  if (options.immutableSnapshot) {
+    if (options.readOnly !== true) {
+      throw new Error("An immutable SQLite snapshot must be opened read-only.");
+    }
+    // Immutable mode intentionally ignores WAL content. It is safe only for
+    // standalone managed snapshots, never for a live database or a source
+    // with outstanding WAL transactions. An empty WAL is harmless.
+    let wal;
+    try {
+      wal = await fs.stat(`${path.resolve(dbPath)}-wal`);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    if (wal && (!wal.isFile() || wal.size !== 0)) {
+      throw new Error("Immutable SQLite snapshot has a nonempty or invalid WAL sidecar.");
+    }
+    // A managed backup is a standalone SQLite file. SQLite's ordinary
+    // read-only WAL connection can nevertheless create -wal/-shm sidecars,
+    // making that backup fail the Restore source-identity check. Immutable
+    // URI mode explicitly suppresses those auxiliary writes.
+    const uri = pathToFileURL(path.resolve(dbPath));
+    uri.searchParams.set("mode", "ro");
+    uri.searchParams.set("immutable", "1");
+    const { immutableSnapshot, ...dbOptions } = options;
+    return createDatabase(uri.href, dbOptions);
+  }
   return createDatabase(dbPath, options);
 }

@@ -54,6 +54,10 @@
 
 Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的空 `state_5.sqlite-wal` 及非权威的 `state_5.sqlite-shm`。主数据库及**非空 WAL** 的改变仍会使 Prepare 失效；此规则避免在读取备份或数据库时因短暂辅助文件出现而误报 `STALE_STATE`。
 
+恢复源的 SQLite 快照通过 `mode=ro&immutable=1` 只读 URI 打开，禁止备份读取时在 **备份目录** 创建 WAL/SHM 辅助文件，因而不会误触发备份源保护校验。备份文件清单校验仍保持完整；外部修改备份会继续触发 `STALE_STATE`。
+
+`scripts/rehearse-history-backup-probe.mjs` 可独立检验真实规模的演练 UndoBackup：把备份数据库恢复到副本内的临时文件，对比迁移前 SQLite provider、其他线程字段哈希，以及整个备份目录修订指纹。运行结束后删除临时数据库；它**不会修改**迁移后的会话文件和主 SQLite 副本，也不能替代整批会话恢复演练。
+
 ## 核心功能
 
 - **同步与切换**：预览或直接同步，按需开启自动同步。

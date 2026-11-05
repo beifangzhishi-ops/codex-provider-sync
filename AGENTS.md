@@ -43,6 +43,16 @@ For content revisions of the State DB, do not fingerprint transient SQLite
 WAL-index (-shm) or a zero-byte WAL. The State DB main file and nonempty WAL
 remain content-bound so a real database change still stales the plan. Cover
 both reader sidecar lifecycle and nonempty WAL/main DB mutations in tests.
+Managed backup SQLite files are standalone snapshots. Open backup *sources*
+with read-only `mode=ro&immutable=1` so inspecting them cannot create WAL
+or SHM files inside the managed backup. Keep complete source backup identity
+checks unchanged. Reject standalone snapshots with a nonempty WAL because
+immutable mode cannot safely include its transactions. Test the WAL-mode Restore path, including compressed
+rollout body preservation, with a source backup containing only the main DB.
+The standalone `rehearse-history-backup-probe.mjs` is a non-destructive
+database-only test of an isolated backup. It must compare all non-provider
+thread fields and the complete source backup revision and remove its
+temporary destination. It does not prove an entire JSONL Restore completed.
 
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.

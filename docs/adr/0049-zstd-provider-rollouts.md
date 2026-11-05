@@ -43,5 +43,14 @@ nonempty WAL, while normalizing the empty WAL and excluding the WAL-index.
 This is not a relaxation for modified thread data: substantive database
 changes still invalidate prepared operations.
 
+In a second Restore failure, the same read-only SQLite connection opened the
+WAL-mode **managed backup source** and created empty WAL/SHM sidecars within
+the source backup. The restore source revision then changed during its own
+pre-snapshot, correctly blocking the operation. For standalone managed
+snapshot *sources only*, SQLite now opens with `mode=ro&immutable=1` URI,
+which prevents auxiliary files from being created. Restore must still verify
+the complete backup source identity before and after staging; do not ignore
+new files in managed backup revision checks.
+
 Run `node --test test/zstd-provider-sync.test.js` and the existing Provider
 revision / backup / Restore regression suites on a supported Node.js runtime.

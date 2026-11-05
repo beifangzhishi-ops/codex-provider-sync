@@ -365,7 +365,7 @@ async function digestRolloutTarget(targetPath) {
   return digestSessionEntry(entry);
 }
 
-async function digestSqliteTarget(sqlitePath, scratchDir) {
+async function digestSqliteTarget(sqlitePath, scratchDir, { immutableSource = false } = {}) {
   if (!await exists(sqlitePath)) {
     return { present: false, digestKind: "absent", digest: sha256Revision("absent") };
   }
@@ -373,7 +373,7 @@ async function digestSqliteTarget(sqlitePath, scratchDir) {
   try {
     const backup = await createSqliteOnlineBackup({
       stateDbLocation: { path: path.resolve(sqlitePath), source: "restore-v2-digest" }
-    }, scratchPath);
+    }, scratchPath, { immutableSource });
     if (!backup.databasePresent) {
       throw new CoreError("STALE_STATE", "The State DB disappeared while its Restore digest was captured.", {
         details: { reason: "state-db" }
@@ -421,7 +421,9 @@ async function expectedPostDigest(target, pre, scratchDir, preRestoreEntry = nul
   if (target.kind === "rollout") {
     return digestSessionEntry(expectedRestoredSessionEntry(target.sourceEntry, preRestoreEntry));
   }
-  if (target.kind === "sqlite") return digestSqliteTarget(target.sourcePath, scratchDir);
+  if (target.kind === "sqlite") return digestSqliteTarget(target.sourcePath, scratchDir, {
+    immutableSource: true
+  });
   if (target.kind === "globalState" && target.sourceAction === "delete") {
     return { present: false, digestKind: "absent", digest: sha256Revision("absent") };
   }

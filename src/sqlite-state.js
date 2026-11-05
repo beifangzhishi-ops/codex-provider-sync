@@ -900,7 +900,10 @@ export async function createSqliteOnlineBackup(storageOrLocation, destinationPat
   try {
     // Read-only is deliberate: a database that disappears after discovery
     // must fail here instead of being silently recreated as an empty file.
-    db = await openDatabase(fullSourcePath, { readOnly: true });
+    db = await openDatabase(fullSourcePath, {
+      readOnly: true,
+      immutableSnapshot: options.immutableSource === true
+    });
     backupPhase = "source-metadata";
     setBusyTimeout(db, options.busyTimeoutMs);
     const sourceMetadata = readSqliteConnectionMetadata(db);
@@ -988,7 +991,7 @@ export async function restoreSqliteOnlineBackup(sourcePath, destinationPath, opt
     // Open and inspect the source before SQLite is allowed to touch the live
     // destination. readOnly also closes the disappearance race without ever
     // creating an empty source database.
-    source = await openDatabase(fullSourcePath, { readOnly: true });
+    source = await openDatabase(fullSourcePath, { readOnly: true, immutableSnapshot: true });
     setBusyTimeout(source, options.busyTimeoutMs);
     readSqliteConnectionMetadata(source);
 
