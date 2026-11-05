@@ -37,17 +37,36 @@
 另有工具生成的独立 UndoBackup。原始备份未复制 `auth.json`。
 备份内容、个人会话正文、文件明细与凭据均不应提交至 Git。
 
-## noha：真实数据尚未修改
+## noha：已完成并通过独立校验
 
-noha 的正式历史迁移命令尚未获设备的执行许可；
-此前仅在独立数据副本上通过了迁移与恢复演练。
-不能把 noha 计为正式迁移成功。
+| 项目 | 结果 |
+| --- | ---: |
+| 迁移前会话文件总数 | 1,525 |
+| 迁移前 SQLite 线程 | 1,481 |
+| 迁移候选会话 | 1,485 |
+| 实际同步会话 | 1,485 |
+| 实际更新 SQLite 线程 | 1,443 |
+| 跳过 | 0 |
+| 部分失败 | 否 |
+| 迁移后 SQLite Provider `openai` | 1,481 / 1,481 |
+| 文件缺失 / 新增 | 0 / 0 |
+| 解压后正文变化 | 0 |
+| 非 Provider 头字段变化 | 0 |
+| SQLite 非 Provider 字段变化 | 否 |
+| 未完成事务 | 0 |
+| 独立完整性状态 | verified |
+
+迁移前 SQLite Provider 计数：`OpenAI=1425`、`openai=38`、
+`deepseek=12`、`openai_http=1`、`team-proxy=2`、`cpa=3`。
+迁移后为 `openai=1481`。原始会话备份与同步工具的 UndoBackup
+分别保留在 noha 的本地 Git 忽略目录及 Codex 数据目录中。
 
 ## 客户端核验边界
 
 Provider 和 SQLite 元数据迁移不自动保证客户端可列出、
 打开或续接会话，尤其是 `.jsonl.zst` 历史。
-6v 上的 `scripts/probe-live-appserver.mjs` 用于执行只读
-`thread/list`、`thread/read` 测试；其实际结果需另行记录。
-即使本地 App Server 读取通过，仍不能直接推定
-Codex Remote 图形界面的显示行为。
+用户已反馈：6v 重装 Codex 后，手机端能看到历史会话。
+这属于 6v 的实际客户端可见性验证，不等于逐个会话都已打开或续接。
+noha 的客户端显示与续接尚未实测。
+`scripts/probe-live-appserver.mjs` 提供只读 `thread/list`、
+`thread/read` 测试；它不能替代客户端端到端续接检查。

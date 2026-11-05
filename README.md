@@ -40,7 +40,7 @@
 - SQLite 关联允许旧 `.jsonl` 路径对应当前同名 `.jsonl.zst`，但不擅自修改 `rollout_path`、对话 ID 或项目路径。
 - 仍先创建 UndoBackup；Restore 会恢复原 provider 和解压后的原始正文（压缩文件字节本身不保证完全一致）。
 - 目前仅支持压缩会话的 **Provider 元数据同步**，不支持其 `turn_context.model` 的历史模型批量改写。该功能也不意味着 Codex Desktop / Remote 必然能够原生读取压缩会话。
-- **不要直接对真实历史目录执行迁移**：先对独立数据副本测试，确认备份、恢复、项目关联和客户端行为，再安排正式同步。
+- **正式迁移前先完成隔离演练与备份核验**：仅在用户明确授权后，对真实历史执行一次同步，并验证恢复能力、项目关联与客户端行为。
 
 ### 完整历史副本演练
 
@@ -58,7 +58,7 @@ Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的
 
 **2026-11-05 双机隔离恢复演练通过**：noha 的 1,525 个会话文件、1,481 条 SQLite 线程，6v 的 576 个会话文件、562 条线程，均完成 Provider-only 同步、完整 Restore 与恢复后逐文件校验；正文、非 provider 元数据均无变化，恢复事务均为 `completed`。详见 [双机完整恢复演练记录](docs/verification/2026-11-05-full-history-restore.md)。
 
-**正式历史迁移进度**：6v 已在真实 `~/.codex` 中完成迁移，570 个会话文件及 558 条 SQLite 线程的 Provider 已同步；包含新会话在内的 577 个文件、563 条线程通过迁移后独立校验，正文和非 Provider 字段无变化。noha 真实历史尚未执行迁移，待该设备的授权操作。客户端 App Server 与 Codex Remote 的最终可见性验证尚未完成。详见 [正式迁移验收记录](docs/verification/2026-11-05-live-history-migration.md)。
+**2026-11-05 双机正式历史迁移均已通过完整性校验**：6v 同步 570 个会话文件及 558 条 SQLite 线程，577 个文件、563 条线程的迁移后校验通过；noha 同步 1,485 个会话文件及 1,443 条 SQLite 线程，1,525 个文件、1,481 条线程的校验通过。两台的消息正文、非 Provider 元数据和 SQLite 其他字段均无变化。用户反馈 6v 重装 Codex 后手机端已能看到历史会话；noha 客户端显示仍未实测。详见 [正式迁移验收记录](docs/verification/2026-11-05-live-history-migration.md)。
 
 ### 真实历史迁移的分阶段保护
 
