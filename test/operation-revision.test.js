@@ -67,6 +67,38 @@ test("operation revisions detect exact config, rollout, and State DB drift", asy
   }
 });
 
+test("content revisions ignore transient SQLite WAL-index and empty WAL but detect durable WAL and DB changes", async () => {
+  const value = await fixture();
+  try {
+    const first = await captureStateDbRevision(value.storage);
+    // SQLite read-only connections can create these files, even though the DB
+    // is unchanged. They must not invalidate a just-prepared Restore.
+    await fs.writeFile(`${value.stateDbPath}-wal`, Buffer.alloc(0));
+    await fs.writeFile(`${value.stateDbPath}-shm`, Buffer.alloc(32768, 5));
+    const afterEmpty = await captureStateDbRevision(value.storage);
+    assert.equal(afterEmpty, first);
+    await fs.writeFile(`${value.stateDbPath}-shm`, Buffer.alloc(32768, 7));
+    assert.equal(await captureStateDbRevision(value.storage), first);
+    await fs.rm(`${value.stateDbPath}-wal`);
+    await fs.rm(`${value.stateDbPath}-shm`);
+    assert.equal(await captureStateDbRevision(value.storage), first);
+
+    // A non-empty WAL carries actual transaction data and must be protected.
+    await fs.writeFile(`${value.stateDbPath}-wal`, Buffer.from("real WAL contents"));
+    const withWal = await captureStateDbRevision(value.storage);
+    assert.notEqual(withWal, first);
+    await fs.writeFile(`${value.stateDbPath}-wal`, Buffer.from("changed WAL bytes"));
+    assert.notEqual(await captureStateDbRevision(value.storage), withWal);
+    await fs.rm(`${value.stateDbPath}-wal`);
+    assert.equal(await captureStateDbRevision(value.storage), first);
+
+    await fs.writeFile(value.stateDbPath, "db-content-changed", "utf8");
+    assert.notEqual(await captureStateDbRevision(value.storage), first);
+  } finally {
+    await fs.rm(value.root, { recursive: true, force: true });
+  }
+});
+
 test("rollout and managed backup revisions are deterministic and content-bound", async () => {
   const value = await fixture();
   const backupDir = path.join(value.codexHome, "backups_state", "provider-sync", "fixture");

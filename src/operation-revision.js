@@ -388,13 +388,20 @@ export async function captureStateDbRevision(storage, { fsImpl = fs, platform = 
     }
     return sha256Revision(stableStringify({ identity: after.identity, state }));
   }
-  const manifest = [];
-  for (const suffix of ["", "-wal", "-shm"]) {
-    manifest.push({
-      path: suffix || "state_5.sqlite",
-      revision: await captureStableFile(`${stateDbPath}${suffix}`, fsImpl)
-    });
-  }
+  // SQLite readers can create or remove an *empty* WAL and its shared-memory
+  // WAL-index (-shm) without modifying the logical database. Neither of those
+  // is authoritative content. Hash the main DB plus any nonempty WAL, so real
+  // writes remain protected while harmless reader lifecycle does not make a
+  // prepared Restore stale.
+  const main = await captureStableFile(stateDbPath, fsImpl);
+  const wal = await captureStableFile(`${stateDbPath}-wal`, fsImpl);
+  const manifest = [
+    { path: "state_5.sqlite", revision: main },
+    {
+      path: "state_5.sqlite-wal",
+      revision: wal.present && wal.size !== "0" ? wal : { present: false }
+    }
+  ];
   return sha256Revision(stableStringify({
     stateDbPath: comparablePath(stateDbPath, platform),
     source: storage.stateDbLocation.source,

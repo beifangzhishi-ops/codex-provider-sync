@@ -34,5 +34,14 @@ so updating SQLite alone can silently disagree with compressed session metadata.
 
 ## Evidence
 
+During full-history Restore on Windows, SQLite inspection can create a
+zero-byte WAL and a 32 KiB `-shm` after Prepare, without changing any durable
+DB bytes. Previously the content revision fingerprint included those
+non-authoritative files and incorrectly rejected Apply with
+`STALE_STATE: state-db`. Content revision now protects the main DB and every
+nonempty WAL, while normalizing the empty WAL and excluding the WAL-index.
+This is not a relaxation for modified thread data: substantive database
+changes still invalidate prepared operations.
+
 Run `node --test test/zstd-provider-sync.test.js` and the existing Provider
 revision / backup / Restore regression suites on a supported Node.js runtime.

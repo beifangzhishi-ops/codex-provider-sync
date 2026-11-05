@@ -36,6 +36,10 @@ Codex Remote app support for compressed history.
 The isolated `restore-diagnostic` action writes a one-shot audit log inside
 the ignored rehearsal Home. Never log session contents or credentials, and
 never invoke it with a real `~/.codex` target.
+For content revisions of the State DB, do not fingerprint transient SQLite
+WAL-index (-shm) or a zero-byte WAL. The State DB main file and nonempty WAL
+remain content-bound so a real database change still stales the plan. Cover
+both reader sidecar lifecycle and nonempty WAL/main DB mutations in tests.
 
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.

@@ -2,6 +2,12 @@
 
 ## 压缩 rollout 的 Provider-only 同步（待上游合并）
 
+恢复前的 SQLite 内容修订指纹（`stateDbRevision`）只保护
+`state_5.sqlite` 主库及非空 `state_5.sqlite-wal`。SQLite 正常读取时生成的
+零字节 WAL 和 `state_5.sqlite-shm` 不构成数据库内容变化，也不得让
+Restore 的 Prepare/Apply 一致性检查误报 `STALE_STATE`。主库或非空 WAL
+实际发生改变时，仍必须使该检查失败。
+
 - Node.js 24+ 的原生 Zstandard codec 支持扫描 `rollout-*.jsonl.zst`，并读写 `session_meta.payload.model_provider`。普通 `.jsonl` 保持原有能力及旧版 Node 支持。
 - Status、Prepare、Apply、SQLite 关联和 UndoBackup / Restore 均识别压缩会话及归档；数据库仍指向旧 `.jsonl` 时，只允许在文件会话 ID 一致时关联同名 `.jsonl.zst`。
 - 对压缩文件仅允许 Provider-only 改写；实现流式解压和压缩，不把完整正文读入内存，保留解压后的正文原字节及原 mtime。新的压缩字节不要求与旧压缩字节相同。
