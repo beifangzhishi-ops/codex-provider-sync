@@ -24,4 +24,5 @@ WORKLOG*.md
 apps/web/test-results/
 apps/web/playwright-report/
 /.local-history-lab/
+/.local-live-migration/
 scripts/__pycache__/

@@ -6,14 +6,8 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
+import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-
-const [action, labArgument] = process.argv.slice(2);
-if (!["capture", "verify", "restore"].includes(action) || !labArgument) {
-  throw new Error("Expected capture|verify|restore and a rehearsal Home path.");
-}
-const lab = path.resolve(labArgument);
-const manifestFile = path.join(lab, ".lab-integrity.json");
 
 async function filesBelow(dir) {
   const files = [];
@@ -39,8 +33,8 @@ function canonicalizeJson(value) {
   return value;
 }
 
-function snapshotThreads() {
-  const db = new DatabaseSync(path.join(lab, "state_5.sqlite"), { readOnly: true });
+function snapshotThreads(home) {
+  const db = new DatabaseSync(path.join(home, "state_5.sqlite"), { readOnly: true });
   try {
     const rows = db.prepare("SELECT * FROM threads ORDER BY id").all();
     const nonProviderRows = rows.map(row => {
@@ -107,32 +101,41 @@ async function fileFingerprint(filePath) {
   }
 }
 
-const sourceFiles = [
-  ...(await filesBelow(path.join(lab, "sessions"))),
-  ...(await filesBelow(path.join(lab, "archived_sessions")))
-].sort();
-const all = {};
-let cursor = 0;
-const workers = Array.from({ length: 4 }, async () => {
-  while (cursor < sourceFiles.length) {
-    const index = cursor++;
-    const filePath = sourceFiles[index];
-    const relativePath = path.relative(lab, filePath).replaceAll("\\", "/");
-    all[relativePath] = await fileFingerprint(filePath);
+// Importable so a live migration can verify the actual Home against a local
+// backup manifest without ever writing into ~/.codex during the preflight.
+export async function runHistoryIntegrity({ action, home, manifestFile }) {
+  if (!["capture", "verify", "restore"].includes(action)) {
+    throw new Error("Expected capture, verify or restore.");
   }
-});
-await Promise.all(workers);
+  const root = path.resolve(home);
+  const manifest = path.resolve(manifestFile ?? path.join(root, ".lab-integrity.json"));
+  const sourceFiles = [
+    ...(await filesBelow(path.join(root, "sessions"))),
+    ...(await filesBelow(path.join(root, "archived_sessions")))
+  ].sort();
+  const all = {};
+  let cursor = 0;
+  const workers = Array.from({ length: 4 }, async () => {
+    while (cursor < sourceFiles.length) {
+      const index = cursor++;
+      const filePath = sourceFiles[index];
+      const relativePath = path.relative(root, filePath).replaceAll("\\", "/");
+      all[relativePath] = await fileFingerprint(filePath);
+    }
+  });
+  await Promise.all(workers);
 
-const data = { files: all, threads: snapshotThreads() };
-if (action === "capture") {
-  await fsp.writeFile(manifestFile, JSON.stringify(data), { flag: "wx" });
-  console.log(JSON.stringify({
-    action, fileCount: Object.keys(data.files).length,
-    threadCount: data.threads.count, providers: data.threads.providerCounts,
-    integrityManifest: manifestFile
-  }));
-} else {
-  const original = JSON.parse(await fsp.readFile(manifestFile, "utf8"));
+  const data = { files: all, threads: snapshotThreads(root) };
+  if (action === "capture") {
+    await fsp.writeFile(manifest, JSON.stringify(data), { flag: "wx" });
+    return {
+      action, ok: true, fileCount: Object.keys(data.files).length,
+      threadCount: data.threads.count, providers: data.threads.providerCounts,
+      integrityManifest: manifest
+    };
+  }
+
+  const original = JSON.parse(await fsp.readFile(manifest, "utf8"));
   const result = {
     action, fileCount: Object.keys(data.files).length,
     threadCount: data.threads.count, providers: data.threads.providerCounts,
@@ -155,6 +158,14 @@ if (action === "capture") {
   }
   const fail = result.missing || result.extra || result.bodyChanged || result.otherHeaderChanged
     || result.unexpectedProvider || result.dbNonProviderChanged || result.dbProviderMismatch;
+  return { ...result, ok: !fail };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]).toLowerCase()
+  === fileURLToPath(import.meta.url).toLowerCase()) {
+  const [action, home, manifestFile] = process.argv.slice(2);
+  if (!home) throw new Error("Expected capture|verify|restore and a history Home.");
+  const result = await runHistoryIntegrity({ action, home, manifestFile });
   console.log(JSON.stringify(result));
-  if (fail) process.exitCode = 2;
+  if (!result.ok) process.exitCode = 2;
 }

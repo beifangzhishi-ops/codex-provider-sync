@@ -55,6 +55,17 @@ Document completed full-history rehearsals with aggregate counts and the
 independent Restore integrity outcome. Keep raw conversations, credentials,
 individual session paths and local backup contents out of Git. A successful
 provider-only Restore never counts as proof of Codex Remote visibility.
+For explicitly owner-authorized live historical Provider migration, use the
+separate one-shot `scripts/migrate-live-history.mjs` backup / migrate / audit
+phases. The backup is placed only under this checkout's ignored
+`.local-live-migration`; it must preserve original session bytes, perform
+an SQLite online backup, exclude `auth.json`, and compare the complete
+original provider/body/non-provider baseline against the real Codex Home.
+Never invoke the mutating phase before a verified backup exists and the
+active provider is lowercase built-in `openai`. Do not restart a migration
+that has an attempt marker, bypass a pending transaction, silently retry
+an approved CCM action, or assume that Provider metadata migration proves
+Codex Remote visibility.
 
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.

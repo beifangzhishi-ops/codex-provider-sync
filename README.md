@@ -58,6 +58,19 @@ Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的
 
 **2026-11-05 双机隔离恢复演练通过**：noha 的 1,525 个会话文件、1,481 条 SQLite 线程，6v 的 576 个会话文件、562 条线程，均完成 Provider-only 同步、完整 Restore 与恢复后逐文件校验；正文、非 provider 元数据均无变化，恢复事务均为 `completed`。详见 [双机完整恢复演练记录](docs/verification/2026-11-05-full-history-restore.md)。真实历史目录仍未迁移，Codex Remote 可见性尚未验证。
 
+### 真实历史迁移的分阶段保护
+
+`scripts/migrate-live-history.mjs` 分离 `backup`、`migrate` 与 `audit`：
+`backup` 只读真实 `~/.codex`，在仓库 Git 忽略的 `.local-live-migration`
+内保存 `sessions`、`archived_sessions` 的原始字节副本、SQLite Online Backup、
+项目索引及配置快照，**不复制 `auth.json`**。备份与真实历史的全部
+解压后正文、Provider、其他头字段、SQLite 非 Provider 字段一致才会标记可用。
+`migrate` 再次验证这份备份与真实数据一致，确认当前默认 Provider
+为内置小写 `openai`、没有未完成事务后，才允许运行一次 Provider-only
+同步，并验证全部历史。任何失败均留下备份及错误报告，**不会自动重试或
+偷偷执行恢复**。独立备份和摘要禁止加入 Git；`audit` 是迁移后的只读复核。
+迁移本身不证明 Codex Remote 能显示、打开或续接历史会话。
+
 ## 核心功能
 
 - **同步与切换**：预览或直接同步，按需开启自动同步。
