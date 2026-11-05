@@ -245,7 +245,7 @@ async function validateSessionManifestEntries(entries, codexHome, physicalEntrie
       throw new Error("Backup session manifest contains a missing or non-absolute rollout path.");
     }
     const target = path.resolve(entry.path);
-    if (!/^rollout-.*\.jsonl$/i.test(path.basename(target))) {
+    if (!/^rollout-.*\.jsonl(?:\.zst)?$/i.test(path.basename(target))) {
       throw new Error(`Backup session target is outside the allowed rollout roots: ${entry.path}`);
     }
     const rawRoot = findRawRolloutRoot(target);

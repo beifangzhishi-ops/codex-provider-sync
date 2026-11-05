@@ -6,6 +6,7 @@ import { CoreError } from "./core-error.js";
 import { fileReadSkipReason, rolloutSkip, providerPathKey } from "./provider-skips.js";
 import { collectProviderChanges, readProviderRevisionHeader, providerAssociationFromHeader } from "./session-files.js";
 import { readSqliteProviderRevisionState } from "./sqlite-state.js";
+import { isZstdRollout } from "./zstd-rollouts.js";
 
 const SESSION_SCOPES = ["sessions", "archived_sessions"];
 const LOCKED_FILE_CODES = new Set(["EACCES", "EBUSY", "EPERM", "ETXTBSY"]);
@@ -207,7 +208,8 @@ async function listRolloutFiles(rootDir, fsImpl, optionalRoot = true) {
     const fullPath = path.join(rootDir, entry.name);
     if (entry.isDirectory()) {
       files.push(...await listRolloutFiles(fullPath, fsImpl, false));
-    } else if (entry.isFile() && entry.name.startsWith("rollout-") && entry.name.endsWith(".jsonl")) {
+    } else if (entry.isFile() && entry.name.startsWith("rollout-")
+        && (entry.name.endsWith(".jsonl") || entry.name.endsWith(".jsonl.zst"))) {
       files.push(fullPath);
     } else if (entry.isSymbolicLink()) {
       throw new CoreError("STALE_STATE", "A rollout revision contains an unsupported symbolic link.", {
@@ -341,7 +343,11 @@ export async function captureAppliedProviderBinding(change, previous, result, { 
     const expected = Buffer.from((result === "APPLIED_IN_PLACE" ? change.originalFirstLine : change.updatedFirstLine)
       + change.originalSeparator, "utf8");
     if (result === "APPLIED_IN_PLACE") Buffer.from(change.inPlaceMutation.replacementBase64, "base64").copy(expected, change.inPlaceMutation.byteOffset);
-    const minimumSize = BigInt(change.originalSize) + BigInt(expected.length - Buffer.byteLength(change.originalFirstLine + change.originalSeparator, "utf8"));
+    // A compressed stream's physical size is not monotonic in its decoded
+    // header length. Its content identity is checked by the decoded header
+    // hash and the physical file identity below, not by a byte-size delta.
+    const minimumSize = isZstdRollout(change.path) ? 0n : BigInt(change.originalSize)
+      + BigInt(expected.length - Buffer.byteLength(change.originalFirstLine + change.originalSeparator, "utf8"));
     if (revision.skipReason) return { ...previous, skip: rolloutSkip(change.path, revision.skipReason, "write", previous.id) };
     if (!record?.record || revision.headerHash !== sha256Revision(expected)
         || BigInt(revision.observedSize) < minimumSize || revision.realPath !== previous.realPath

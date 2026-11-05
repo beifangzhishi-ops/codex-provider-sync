@@ -6,6 +6,7 @@ export function rolloutSkip(filePath, reason, stage = "scan", id = null) {
 }
 
 export function fileReadSkipReason(error) {
+  if (error?.name === "RolloutZstdDecodingError") return "metadata-invalid";
   if (error?.name === "RolloutMetadataEncodingError") return "metadata-invalid-utf8";
   if (error?.name === "RolloutMetadataLimitError") return "metadata-too-large";
   const code = error?.code === "ROLLOUT_FILE_BUSY" ? error?.cause?.code : error?.code;
@@ -95,7 +96,9 @@ export function selectProviderRows(home, scan, state, targetProvider, additional
   for (const row of rows) {
     const idMatches = state.key === "rowid" ? [] : (byId.get(String(row.id)) ?? []);
     const pathKey = rowRolloutPath(home, row.rollout_path);
-    const pathMatch = pathKey ? byPath.get(pathKey) : null;
+    // Existing Codex indexes may still use the original .jsonl path after a
+    // rollout has been compressed to .jsonl.zst. The ID must still agree.
+    const pathMatch = pathKey ? (byPath.get(pathKey) ?? byPath.get(`${pathKey}.zst`)) : null;
     const matches = [...new Map([...idMatches, ...(pathMatch ? [pathMatch] : [])].map(file => [providerPathKey(file.path), file])).values()];
     const paginatedGroup = state.key !== "rowid" && pathMatch?.id === String(row.id)
       && matches.every(file => file.id === String(row.id) && file.historyMode === "paginated");

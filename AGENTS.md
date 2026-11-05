@@ -46,6 +46,19 @@ Help reuse Codex sessions affected by `model_provider` metadata mismatches by ke
 
 ## Storage and path rules
 
+Provider-only Zstandard rollout support (source branch): the inventory includes
+`rollout-*.jsonl.zst` in active and archived trees. It requires native Zstandard
+stream support from Node.js 24+ only when compressed rollouts are present;
+ordinary JSONL must remain usable on older supported Node versions.
+Read the bounded decompressed header, preserve the decompressed JSONL body
+byte-for-byte, stage a new compressed file, fsync, revalidate the source and
+atomically replace it. Restore must recover the original provider without
+decompressing permanently. Existing SQLite `.jsonl` paths may associate with
+the same physical `.jsonl.zst` file only with consistent session identity.
+Never claim that local Provider synchronization makes Codex Remote itself
+support compressed files. The model-repair path is intentionally unsupported
+for compressed rollouts until a model-aware write-and-restore transaction exists.
+
 Resolve SQLite Home in this order:
 
 1. explicit CLI, desktop GUI, or Web profile override

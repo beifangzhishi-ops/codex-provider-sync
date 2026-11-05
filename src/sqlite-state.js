@@ -46,7 +46,8 @@ async function countRolloutFilesInDir(rootDir) {
       count += await countRolloutFilesInDir(fullPath);
       continue;
     }
-    if (entry.isFile() && entry.name.startsWith("rollout-") && entry.name.endsWith(".jsonl")) {
+    if (entry.isFile() && entry.name.startsWith("rollout-")
+        && (entry.name.endsWith(".jsonl") || entry.name.endsWith(".jsonl.zst"))) {
       count += 1;
     }
   }

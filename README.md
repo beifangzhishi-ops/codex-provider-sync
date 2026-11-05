@@ -32,6 +32,16 @@
 - **希望在本工具中切换**：选择目标 Provider；工具会更新配置，再同步会话文件和索引中的 Provider。
 - **Provider 信息已经一致**：不必重复同步；继续失败时应查看 Codex 的具体报错。
 
+## 压缩历史会话（源码分支功能）
+
+此分支支持在 **Node.js 24+** 上扫描、同步和恢复 `rollout-*.jsonl.zst`（Zstandard）会话文件，包括 `sessions` 和 `archived_sessions`。普通 `.jsonl` 仍按原有流程处理，低版本 Node 的普通会话能力不受影响。
+
+- 同步时保留 `.zst` 文件名和压缩格式，只改压缩流解码后的 `session_meta.payload.model_provider`，不改变其余 JSONL 正文的解压后字节。
+- SQLite 关联允许旧 `.jsonl` 路径对应当前同名 `.jsonl.zst`，但不擅自修改 `rollout_path`、对话 ID 或项目路径。
+- 仍先创建 UndoBackup；Restore 会恢复原 provider 和解压后的原始正文（压缩文件字节本身不保证完全一致）。
+- 目前仅支持压缩会话的 **Provider 元数据同步**，不支持其 `turn_context.model` 的历史模型批量改写。该功能也不意味着 Codex Desktop / Remote 必然能够原生读取压缩会话。
+- **不要直接对真实历史目录执行迁移**：先对独立数据副本测试，确认备份、恢复、项目关联和客户端行为，再安排正式同步。
+
 ## 核心功能
 
 - **同步与切换**：预览或直接同步，按需开启自动同步。

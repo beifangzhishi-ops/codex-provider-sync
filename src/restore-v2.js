@@ -135,7 +135,7 @@ async function restoreTargetRelativePath(target, physicalHome, platform, errorCo
     }
     return [allowed.find((name) => compare(fileName, name))];
   } else if (target.kind === "rollout") {
-    if (!/^rollout-.*\.jsonl$/i.test(path.basename(targetPath))) {
+    if (!/^rollout-.*\.jsonl(?:\.zst)?$/i.test(path.basename(targetPath))) {
       throw restoreBoundaryError(errorCode, target.kind);
     }
     let rawRoot = path.dirname(targetPath);

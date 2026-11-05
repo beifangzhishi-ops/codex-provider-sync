@@ -1,0 +1,38 @@
+# ADR-0049: Zstandard-compressed rollout metadata synchronization
+
+Status: Proposed (source branch; not yet an upstream release).
+
+## Problem
+
+Codex history may be archived as `rollout-*.jsonl.zst`. Before this change,
+provider discovery, preparation, and backup validation considered only plain
+`.jsonl`. Existing SQLite rows can still reference the old `.jsonl` path,
+so updating SQLite alone can silently disagree with compressed session metadata.
+
+## Decision
+
+- Recognize both plain and compressed rollout names in all Provider inventories,
+  revision capture, SQLite association, and allowed Restore targets.
+- Require Node.js 24 native streaming Zstandard for compressed files only.
+- Decompress only a bounded session header during Status/Provider preparation.
+- Rewrite the compressed stream through a staged file, replacing only the
+  decoded session metadata line; copy subsequent decoded bytes without parsing.
+- Revalidate source file identity before atomic replacement and fsync staged
+  content. Keep the original mtime, thread ID and project path.
+- Restore original provider metadata from the UndoBackup through the same
+  streaming codec. Compare restored *decoded* body bytes, not compressed bytes.
+- Treat a stored `.jsonl` SQLite path as an alias for a matching `.jsonl.zst`
+  path only after existing thread-identity safeguards.
+
+## Boundaries
+
+- The compressed writer does not support history model-field modifications.
+- This does not make Codex Desktop / Remote capable of opening compressed
+  session files by itself. No index paths are rewritten merely to imply that.
+- No changes to authentication, sessions or migration status without a
+  separately authorized execution against a copy of user data.
+
+## Evidence
+
+Run `node --test test/zstd-provider-sync.test.js` and the existing Provider
+revision / backup / Restore regression suites on a supported Node.js runtime.

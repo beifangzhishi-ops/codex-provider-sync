@@ -12,6 +12,12 @@ import { syncDirectory } from "./atomic-file.js";
 import { CoreError } from "./core-error.js";
 import { fileReadSkipReason, rolloutSkip, summarizeSkips } from "./provider-skips.js";
 import { WINDOWS_LOCK_PROBE_SCRIPT, parseWindowsLockProbeResult } from "./windows-lock-probe.js";
+import {
+  isZstdRollout,
+  openZstdRollout,
+  readZstdRolloutHeader,
+  stageZstdRolloutHeader
+} from "./zstd-rollouts.js";
 
 const execFileAsync = promisify(execFile);
 const ROLLOUT_SCAN_CHUNK_BYTES = 1024 * 1024;
@@ -65,7 +71,8 @@ function wrapRolloutFileBusyError(error, filePath, action) {
     return error;
   }
   return new Error(
-    `Unable to ${action} rollout file because it is currently in use. Close Codex and the Codex app, then retry. Locked file: ${filePath}`
+    `Unable to ${action} rollout file because it is currently in use. Close Codex and the Codex app, then retry. Locked file: ${filePath}`,
+    { cause: error }
   );
 }
 
@@ -164,7 +171,8 @@ async function listJsonlFiles(rootDir) {
       files.push(...(await listJsonlFiles(fullPath)));
       continue;
     }
-    if (entry.isFile() && entry.name.startsWith("rollout-") && entry.name.endsWith(".jsonl")) {
+    if (entry.isFile() && entry.name.startsWith("rollout-")
+        && (entry.name.endsWith(".jsonl") || entry.name.endsWith(".jsonl.zst"))) {
       files.push(fullPath);
     }
   }
@@ -172,6 +180,19 @@ async function listJsonlFiles(rootDir) {
 }
 
 async function readFirstLineRecord(filePath, { maxBytes = Number.POSITIVE_INFINITY, fsImpl = fsp, wrapBusyErrors = true, strictMetadata = false } = {}) {
+  if (isZstdRollout(filePath)) {
+    try {
+      const record = await readZstdRolloutHeader(filePath, maxBytes);
+      return {
+        firstLine: decodeFirstLine(record.bytes, strictMetadata),
+        separator: record.separator,
+        offset: record.offset
+      };
+    } catch (error) {
+      if (error.name === "RolloutMetadataLimitError") throw new RolloutMetadataLimitError();
+      throw wrapBusyErrors ? wrapRolloutFileBusyError(error, filePath, "read") : error;
+    }
+  }
   let handle;
   try {
     handle = await fsImpl.open(filePath, "r");
@@ -275,18 +296,26 @@ async function scanRolloutBody(
   let hasUserEvent = includeUserEvent && recordHasUserEvent(JSON.parse(firstLine));
   let lineIndex = 0;
 
-  const stream = fs.createReadStream(rolloutPath, {
-    encoding: "utf8",
-    start: headerLength,
-    highWaterMark: ROLLOUT_SCAN_CHUNK_BYTES
-  });
+  const compressed = isZstdRollout(rolloutPath);
+  const stream = compressed
+    ? openZstdRollout(rolloutPath)
+    : fs.createReadStream(rolloutPath, {
+      encoding: "utf8",
+      start: headerLength,
+      highWaterMark: ROLLOUT_SCAN_CHUNK_BYTES
+    });
   const lines = readline.createInterface({
     input: stream,
     crlfDelay: Infinity
   });
 
   try {
+    let firstCompressedLine = compressed;
     for await (const line of lines) {
+      if (firstCompressedLine) {
+        firstCompressedLine = false;
+        continue;
+      }
       lineIndex += 1;
       if (includeEncryptedContent) hasEncryptedContent ||= line.includes("encrypted_content");
       if (includeUserEvent && !hasUserEvent) {
@@ -452,6 +481,7 @@ const SAFE_IN_PLACE_PROVIDER_ID_RE = /^[A-Za-z0-9._-]+$/;
 const PROVIDER_MUTATION_STRATEGY = "provider_bytes_in_place";
 
 function getInPlaceProviderMutation(change) {
+  if (isZstdRollout(change?.path)) return null;
   if (!change
       || (change.originalNlink !== undefined && change.originalNlink !== 1)
       || change.modelRewriteRequired
@@ -1419,7 +1449,77 @@ async function rewriteFirstLine(filePath, nextFirstLine, separator) {
   }
 }
 
+async function tryRewriteCompressedFirstLine(change) {
+  if (change.modelRewriteRequired || change.modelOnlyChange) {
+    throw new Error("Compressed rollout model rewriting is not supported by provider-only Zstandard synchronization.");
+  }
+  let before;
+  try {
+    const info = await fsp.lstat(change.path);
+    if (info.isSymbolicLink() || !info.isFile()) {
+      return "SKIP_CHANGED";
+    }
+    before = await getFileSnapshot(change.path);
+  } catch (error) {
+    const reason = fileReadSkipReason(error);
+    if (reason === "missing") return "SKIP_MISSING";
+    if (reason === "unreadable") return "SKIP_UNREADABLE";
+    if (reason === "locked") return "SKIP_BUSY";
+    error.sourceUnchanged = true;
+    throw error;
+  }
+  if (!snapshotMatches(change, before)) return "SKIP_CHANGED";
+  const record = await readFirstLineRecord(change.path, {
+    maxBytes: Buffer.byteLength(change.originalFirstLine, "utf8"),
+    strictMetadata: true
+  });
+  if (record.firstLine !== change.originalFirstLine || record.offset !== change.originalOffset) {
+    return "SKIP_CHANGED";
+  }
+  const tmpPath = `${change.path}.provider-sync.${process.pid}.${Date.now()}.tmp`;
+  let replacementAttempted = false;
+  try {
+    await stageZstdRolloutHeader(change.path, tmpPath, change.originalFirstLine, change.updatedFirstLine);
+    if (!snapshotMatches(change, await getFileSnapshot(change.path))) return "SKIP_CHANGED";
+    await fsp.chmod(tmpPath, before.mode);
+    replacementAttempted = true;
+    await fsp.rename(tmpPath, change.path);
+    await syncDirectory(path.dirname(change.path));
+    return "APPLIED";
+  } catch (error) {
+    if (!replacementAttempted) error.sourceUnchanged = true;
+    throw wrapRolloutFileBusyError(error, change.path, "rewrite");
+  } finally {
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+  }
+}
+
+async function restoreCompressedFirstLine(filePath, updatedFirstLine) {
+  const before = await getFileSnapshot(filePath);
+  const info = await fsp.lstat(filePath);
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new CoreError("ROLLOUT_CHANGED", "Unsafe compressed rollout restore target.");
+  }
+  const current = await readFirstLineRecord(filePath, { strictMetadata: true });
+  const tmpPath = `${filePath}.provider-sync-restore.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await stageZstdRolloutHeader(filePath, tmpPath, current.firstLine, updatedFirstLine);
+    if (before.size !== (await getFileSnapshot(filePath)).size
+        || before.mtimeMs !== (await getFileSnapshot(filePath)).mtimeMs) {
+      throw new CoreError("ROLLOUT_CHANGED", "Compressed rollout changed during restore.");
+    }
+    await fsp.chmod(tmpPath, before.mode);
+    await fsp.rename(tmpPath, filePath);
+    await syncDirectory(path.dirname(filePath));
+  } finally {
+    await fsp.rm(tmpPath, { force: true }).catch(() => {});
+  }
+}
+
 async function tryRewriteCollectedFirstLine(change, options = {}) {
+  if (isZstdRollout(change?.path)) {
+    return tryRewriteCompressedFirstLine(change);
+  }
   if (change.inPlaceMutation?.strategy === PROVIDER_MUTATION_STRATEGY) {
     return tryRewriteProviderInPlace(change, options);
   }
@@ -1896,6 +1996,11 @@ export async function collectSessionChanges(codexHome, targetProvider, options =
         && targetModel.length > 0
         && currentModels.some((currentModel) => currentModel !== targetModel);
 
+      if (modelChanged && isZstdRollout(rolloutPath)) {
+        skip(rolloutPath, "compressed-model-unsupported", parsed.payload.id);
+        continue;
+      }
+
       if (providerChanged || modelChanged) {
         const snapshot = prepared?.afterSnapshot ?? await getFileSnapshot(rolloutPath);
         if (snapshot.size !== scanStart.size || snapshot.mtimeMs !== scanStart.mtimeMs
@@ -2179,7 +2284,7 @@ export async function applySessionChanges(changes, options = {}) {
     const timing = firstLineChanges.length > 0 ? createWindowsFirstLineTiming() : null;
     const totalStart = timing ? timingNow() : null;
     try {
-      if (firstLineChanges.length > 0) {
+      if (firstLineChanges.some(change => !isZstdRollout(change.path))) {
         const workerStartupStart = timingNow();
         try {
           worker = await windowsRewriteWorkerFactory();
@@ -2193,7 +2298,11 @@ export async function applySessionChanges(changes, options = {}) {
         const requestStart = timingNow();
         let result;
         try {
-          try { result = await worker.rewrite(change, { requireOriginalMatch: true }); }
+          try {
+            result = isZstdRollout(change.path)
+              ? await tryRewriteCompressedFirstLine(change)
+              : await worker.rewrite(change, { requireOriginalMatch: true });
+          }
           catch (error) { if (error.sourceUnchanged === true) await onUnwritten?.(change); throw error; }
         } finally {
           timing.requestRoundTripMs += elapsedTimingMs(requestStart);
@@ -2426,7 +2535,12 @@ export async function restoreSessionChanges(manifestEntries, options = {}) {
   for (const entry of manifestEntries) {
     try {
       await options.onBeforeRestore?.(entry);
-      if (entry.mutation) {
+      if (isZstdRollout(entry.path)) {
+        if (entry.originalTurnContextModels?.length) {
+          throw new Error("Compressed rollout turn_context model restore requires a model-aware writer.");
+        }
+        await restoreCompressedFirstLine(entry.path, entry.originalFirstLine);
+      } else if (entry.mutation) {
         validateProviderMutationDescriptor(entry.mutation, entry.path, entry.originalFirstLine, entry.originalSeparator);
         if (process.platform === "win32") {
           const result = await restoreWindows({
