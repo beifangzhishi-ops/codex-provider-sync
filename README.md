@@ -56,7 +56,9 @@ Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的
 
 `scripts/rehearse-history-backup-probe.mjs` 可独立检验真实规模的演练 UndoBackup：把备份数据库恢复到副本内的临时文件，对比迁移前 SQLite provider、其他线程字段哈希，以及整个备份目录修订指纹。运行结束后删除临时数据库；它**不会修改**迁移后的会话文件和主 SQLite 副本，也不能替代整批会话恢复演练。
 
-**2026-11-05 双机隔离恢复演练通过**：noha 的 1,525 个会话文件、1,481 条 SQLite 线程，6v 的 576 个会话文件、562 条线程，均完成 Provider-only 同步、完整 Restore 与恢复后逐文件校验；正文、非 provider 元数据均无变化，恢复事务均为 `completed`。详见 [双机完整恢复演练记录](docs/verification/2026-11-05-full-history-restore.md)。真实历史目录仍未迁移，Codex Remote 可见性尚未验证。
+**2026-11-05 双机隔离恢复演练通过**：noha 的 1,525 个会话文件、1,481 条 SQLite 线程，6v 的 576 个会话文件、562 条线程，均完成 Provider-only 同步、完整 Restore 与恢复后逐文件校验；正文、非 provider 元数据均无变化，恢复事务均为 `completed`。详见 [双机完整恢复演练记录](docs/verification/2026-11-05-full-history-restore.md)。
+
+**正式历史迁移进度**：6v 已在真实 `~/.codex` 中完成迁移，570 个会话文件及 558 条 SQLite 线程的 Provider 已同步；包含新会话在内的 577 个文件、563 条线程通过迁移后独立校验，正文和非 Provider 字段无变化。noha 真实历史尚未执行迁移，待该设备的授权操作。客户端 App Server 与 Codex Remote 的最终可见性验证尚未完成。详见 [正式迁移验收记录](docs/verification/2026-11-05-live-history-migration.md)。
 
 ### 真实历史迁移的分阶段保护
 
