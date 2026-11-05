@@ -33,12 +33,10 @@ content to Git. Always capture the decoded body hashes and non-provider State
 DB fingerprint before a rehearsal Sync, verify after, and verify again after
 Restore. This tests local Provider migration only; it does not establish
 Codex Remote app support for compressed history.
-The isolated `restore-diagnostic` action writes a one-shot audit log inside
-the ignored rehearsal Home. Never log session contents or credentials, and
-never invoke it with a real `~/.codex` target.
-After applying the revision fix, `restore-after-fix` uses its own one-shot
-audit log, leaving the initial failed diagnostic unchanged. Neither mode may
-reissue or reuse an already-approved frozen command.
+The isolated `restore-rehearsal` action writes a one-shot audit log and
+completion report inside the ignored rehearsal Home. Never log session
+contents or credentials; never invoke it with a real `~/.codex` target.
+Never reissue an already-approved frozen command.
 For content revisions of the State DB, do not fingerprint transient SQLite
 WAL-index (-shm) or a zero-byte WAL. The State DB main file and nonempty WAL
 remain content-bound so a real database change still stales the plan. Cover

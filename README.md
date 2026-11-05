@@ -46,11 +46,9 @@
 
 `scripts/rehearse-history-snapshot.py` 可使用 SQLite Online Backup 和原始会话文件创建隔离副本（不会复制 `auth.json`），仅在副本数据库中重新定位 `rollout_path`；`scripts/rehearse-history-integrity.mjs` 计算所有文件 **解压后消息正文** 与非 Provider SQLite 字段的完整性基线；`scripts/rehearse-history-sync.mjs` 只接受名为 `.local-history-lab` 的副本目录，执行 Provider 同步或 UndoBackup 恢复。演练副本和完整性清单属于本地敏感数据，禁止加入 Git 提交或共享。
 
-请依次完成快照、`capture`、`sync`、`verify`、`restore`、`restore` 完整性校验；真正的 Codex Remote 可见性还需要另行验证。
+请依次完成快照、`capture`、`sync`、`verify`、`restore-rehearsal`、`restore` 完整性校验；真正的 Codex Remote 可见性还需要另行验证。
 
-大型恢复若无完成输出，可改用独立的 `restore-diagnostic` 入口：在受控副本中记录 Prepare、快照、事务阶段和异常到 `.local-history-lab/.lab-restore-diagnostic.jsonl`，并保留定期心跳。该入口只允许执行一次，不复用已发出的授权命令；诊断入口本身不更改恢复事务的语义。
-
-完成修复后可用一次性的 `restore-after-fix` 验证恢复全过程，使用独立的 `.lab-restore-after-fix.jsonl` 留痕，不覆盖第一次失败诊断证据。两种诊断模式均只允许作用于隔离副本，日志都不应包含会话内容。
+整批恢复使用唯一的 `restore-rehearsal` 入口：只操作仓库内 `.local-history-lab`，向 `.lab-restore-rehearsal.jsonl` 记录进度、心跳和错误，成功时生成 `.lab-restore-report.json`。每份副本只允许执行一次；不会覆盖已经存在的诊断证据，日志也不包含会话正文。
 
 Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的空 `state_5.sqlite-wal` 及非权威的 `state_5.sqlite-shm`。主数据库及**非空 WAL** 的改变仍会使 Prepare 失效；此规则避免在读取备份或数据库时因短暂辅助文件出现而误报 `STALE_STATE`。
 
