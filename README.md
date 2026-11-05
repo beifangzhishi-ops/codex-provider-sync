@@ -56,6 +56,8 @@ Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的
 
 `scripts/rehearse-history-backup-probe.mjs` 可独立检验真实规模的演练 UndoBackup：把备份数据库恢复到副本内的临时文件，对比迁移前 SQLite provider、其他线程字段哈希，以及整个备份目录修订指纹。运行结束后删除临时数据库；它**不会修改**迁移后的会话文件和主 SQLite 副本，也不能替代整批会话恢复演练。
 
+**2026-11-05 双机隔离恢复演练通过**：noha 的 1,525 个会话文件、1,481 条 SQLite 线程，6v 的 576 个会话文件、562 条线程，均完成 Provider-only 同步、完整 Restore 与恢复后逐文件校验；正文、非 provider 元数据均无变化，恢复事务均为 `completed`。详见 [双机完整恢复演练记录](docs/verification/2026-11-05-full-history-restore.md)。真实历史目录仍未迁移，Codex Remote 可见性尚未验证。
+
 ## 核心功能
 
 - **同步与切换**：预览或直接同步，按需开启自动同步。

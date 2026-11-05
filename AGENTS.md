@@ -51,6 +51,10 @@ The standalone `rehearse-history-backup-probe.mjs` is a non-destructive
 database-only test of an isolated backup. It must compare all non-provider
 thread fields and the complete source backup revision and remove its
 temporary destination. It does not prove an entire JSONL Restore completed.
+Document completed full-history rehearsals with aggregate counts and the
+independent Restore integrity outcome. Keep raw conversations, credentials,
+individual session paths and local backup contents out of Git. A successful
+provider-only Restore never counts as proof of Codex Remote visibility.
 
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.
