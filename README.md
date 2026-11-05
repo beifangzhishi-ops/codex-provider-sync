@@ -48,6 +48,8 @@
 
 请依次完成快照、`capture`、`sync`、`verify`、`restore`、`restore` 完整性校验；真正的 Codex Remote 可见性还需要另行验证。
 
+大型恢复若无完成输出，可改用独立的 `restore-diagnostic` 入口：在受控副本中记录 Prepare、快照、事务阶段和异常到 `.local-history-lab/.lab-restore-diagnostic.jsonl`，并保留定期心跳。该入口只允许执行一次，不复用已发出的授权命令；原有同步和 Restore 逻辑不变。
+
 ## 核心功能
 
 - **同步与切换**：预览或直接同步，按需开启自动同步。

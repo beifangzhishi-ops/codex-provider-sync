@@ -33,6 +33,9 @@ content to Git. Always capture the decoded body hashes and non-provider State
 DB fingerprint before a rehearsal Sync, verify after, and verify again after
 Restore. This tests local Provider migration only; it does not establish
 Codex Remote app support for compressed history.
+The isolated `restore-diagnostic` action writes a one-shot audit log inside
+the ignored rehearsal Home. Never log session contents or credentials, and
+never invoke it with a real `~/.codex` target.
 
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.
