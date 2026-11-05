@@ -72,6 +72,12 @@ Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的
 同步，并验证全部历史。任何失败均留下备份及错误报告，**不会自动重试或
 偷偷执行恢复**。独立备份和摘要禁止加入 Git；`audit` 是迁移后的只读复核。
 迁移本身不证明 Codex Remote 能显示、打开或续接历史会话。
+如果准备重装 Codex，可以运行 `scripts/backup-before-reinstall.py`：
+在原有备份旁新建独立的 `pre-reinstall-*` 快照，覆盖当前
+`sessions`、`archived_sessions`、SQLite 在线备份及历史索引、配置文件；
+不复制 `auth.json`，不覆盖旧备份。快照会逐文件做 SHA-256 比对，
+并检查 SQLite 线程索引与实时数据一致；输出 `backup-report.json`。
+只有 `status=verified` 才视为重装前完成新备份。
 迁移校验通过后，可用 `scripts/probe-live-appserver.mjs` 调用本地
 Codex App Server 的 `thread/list` 与 `thread/read`，验证已索引历史能否
 显示和读取压缩文件。探针仅查询，不发送 `thread/start`、
