@@ -70,6 +70,11 @@ Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的
 同步，并验证全部历史。任何失败均留下备份及错误报告，**不会自动重试或
 偷偷执行恢复**。独立备份和摘要禁止加入 Git；`audit` 是迁移后的只读复核。
 迁移本身不证明 Codex Remote 能显示、打开或续接历史会话。
+迁移校验通过后，可用 `scripts/probe-live-appserver.mjs` 调用本地
+Codex App Server 的 `thread/list` 与 `thread/read`，验证已索引历史能否
+显示和读取压缩文件。探针仅查询，不发送 `thread/start`、
+`thread/resume` 或任何写入方法；结果仅输出计数与布尔值。
+这仍不等同于 Codex Remote 图形界面的端到端验证。
 
 ## 核心功能
 

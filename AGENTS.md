@@ -66,6 +66,10 @@ active provider is lowercase built-in `openai`. Do not restart a migration
 that has an attempt marker, bypass a pending transaction, silently retry
 an approved CCM action, or assume that Provider metadata migration proves
 Codex Remote visibility.
+The post-migration `scripts/probe-live-appserver.mjs` is deliberately limited
+to read-only App Server thread/list and thread/read calls. Do not start or
+resume a thread to make the probe pass, and do not log conversation titles,
+messages or identifiers. App Server API success is not Remote UI evidence.
 
 1. Inspect with the UI status action or `codex-provider status`.
 2. Confirm the current Provider, effective SQLite Home/database, and rollout/SQLite Provider distributions.
