@@ -50,6 +50,8 @@
 
 大型恢复若无完成输出，可改用独立的 `restore-diagnostic` 入口：在受控副本中记录 Prepare、快照、事务阶段和异常到 `.local-history-lab/.lab-restore-diagnostic.jsonl`，并保留定期心跳。该入口只允许执行一次，不复用已发出的授权命令；诊断入口本身不更改恢复事务的语义。
 
+完成修复后可用一次性的 `restore-after-fix` 验证恢复全过程，使用独立的 `.lab-restore-after-fix.jsonl` 留痕，不覆盖第一次失败诊断证据。两种诊断模式均只允许作用于隔离副本，日志都不应包含会话内容。
+
 Restore 的 State DB 内容修订指纹忽略 SQLite 读取进程可能创建的空 `state_5.sqlite-wal` 及非权威的 `state_5.sqlite-shm`。主数据库及**非空 WAL** 的改变仍会使 Prepare 失效；此规则避免在读取备份或数据库时因短暂辅助文件出现而误报 `STALE_STATE`。
 
 ## 核心功能

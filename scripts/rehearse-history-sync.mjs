@@ -8,8 +8,8 @@ import path from "node:path";
 import { applyRestore, prepareRestore, runRestore, runSync } from "../src/service.js";
 
 const [action, target] = process.argv.slice(2);
-if (!["sync", "restore", "restore-diagnostic"].includes(action) || !target) {
-  throw new Error("Usage: node scripts/rehearse-history-sync.mjs sync|restore|restore-diagnostic <lab-home>");
+if (!["sync", "restore", "restore-diagnostic", "restore-after-fix"].includes(action) || !target) {
+  throw new Error("Usage: node scripts/rehearse-history-sync.mjs sync|restore|restore-diagnostic|restore-after-fix <lab-home>");
 }
 const lab = path.resolve(target);
 assert.ok(path.basename(lab) === ".local-history-lab", "Refusing to operate outside a known local rehearsal directory");
@@ -45,10 +45,11 @@ if (action === "sync") {
   await fsp.writeFile(reportPath, JSON.stringify(summary, null, 2), { flag: "wx" });
   console.log(JSON.stringify(summary));
   if (result.partial) process.exitCode = 2;
-} else if (action === "restore-diagnostic") {
+} else if (action === "restore-diagnostic" || action === "restore-after-fix") {
   const report = JSON.parse(await fsp.readFile(reportPath, "utf8"));
   assert.ok(report.backupDir, "Cannot diagnose restore without an UndoBackup.");
-  const auditPath = path.join(lab, ".lab-restore-diagnostic.jsonl");
+  const auditPath = path.join(lab, action === "restore-after-fix"
+    ? ".lab-restore-after-fix.jsonl" : ".lab-restore-diagnostic.jsonl");
   const auditHandle = await fsp.open(auditPath, "wx");
   const stamp = event => JSON.stringify({ timestamp: new Date().toISOString(), ...event }) + "\n";
   const writeAudit = event => fs.appendFileSync(auditPath, stamp(event));
