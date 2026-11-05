@@ -23,3 +23,5 @@ WORKLOG*.md
 .playwright-cli/
 apps/web/test-results/
 apps/web/playwright-report/
+/.local-history-lab/
+scripts/__pycache__/

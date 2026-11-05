@@ -20,9 +20,12 @@ def main():
     args = parser.parse_args()
     src = args.source.resolve(strict=True)
     dst = args.destination.resolve(strict=False)
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    if dst.name != ".local-history-lab" or repo_root not in dst.parents:
+        parser.error("Rehearsal destination must be .local-history-lab under this checkout.")
     if dst.exists():
         parser.error(f"Refusing to replace an existing rehearsal: {dst}")
-    if dst == src or src in dst.parents and dst.parts[: len(src.parts)] == src.parts:
+    if dst == src or src in dst.parents:
         parser.error("Rehearsal must not be inside the real Codex Home.")
     if not (src / "state_5.sqlite").is_file():
         parser.error("Source root State DB is missing.")
